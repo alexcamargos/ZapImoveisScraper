@@ -1,8 +1,12 @@
-# Zap Imoveis Scraper
+# Zap Imoveis Scrape
 
+A scraper that gathers data from [Zap Imóveis](http://zapimoveis.com.br) website using BeautifulSoup.
 
-## Introduction
+## Usage
 
+```python
+python .\scraper.py
+```
 
 ## Copyright
 
