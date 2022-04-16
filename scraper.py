@@ -27,6 +27,7 @@ TIPOS_IMOVEIS = ['Casas', 'Apartamentos', 'Quitinetes']
 BASE_URL = 'www.zapimoveis.com.br'
 PORT = 443
 CERT_REQS = 'CERT_NONE'
+QUANTITY_TO_FETCH = 2
 
 
 class DataScraper:
@@ -46,17 +47,18 @@ class DataScraper:
         vagas = []
         uri = []
         cidade = []
-        endreco = []
+        logradouro = []
+        bairro = []
         tipo_negociacao = []
 
-        for _cidade in CIDADES:
+        for query_cidade in CIDADES:
             for tipo_imovel in TIPOS_IMOVEIS:
-                for page in range(1, 50):
+                for page in range(1, QUANTITY_TO_FETCH):
                     sleep_time = randint(60, 120)
                     http = urllib3.HTTPSConnectionPool(BASE_URL, PORT, CERT_REQS)
 
                     url = '/aluguel/' + slugify(tipo_imovel) + '/mg+' + slugify(
-                        _cidade) + '/?pagina=1&tipoUnidade=Residencial,Apartamento&transacao=Aluguel' + str(
+                        query_cidade) + '/?pagina=1&tipoUnidade=Residencial,Apartamento&transacao=Aluguel' + str(
                         page)
                     page = http.request('GET', url)
 
@@ -65,18 +67,26 @@ class DataScraper:
 
                     for row in result:
                         tipo_negociacao.append(tipo_imovel)
-                        cidade.append(_cidade)
+                        cidade.append(query_cidade)
 
                         endereco_find = row.find('h2', 'simple-card__address color-dark text-regular')
                         endereco_text = ''
 
                         if endereco_find:
                             endereco_text = endereco_find.text
+                            endereco_text = endereco_text.strip()
 
-                        endreco.append(endereco_text)
+                        if ',' in endereco_text:
+                            logradouro_tmp, bairro_tmp = endereco_text.split(',')
+                            logradouro.append(logradouro_tmp)
+                            bairro.append(bairro_tmp)
+                        else:
+                            logradouro.append(endereco_text)
+                            bairro.append('')
 
                         valor_find = row.find("p",
-                                              "simple-card__price js-price color-darker heading-regular heading-regular__bolder align-left")
+                                              "simple-card__price js-price color-darker heading-regular "
+                                              "heading-regular__bolder align-left")
                         if valor_find:
                             valor_find = valor_find.text.split('\n')
                             valor.append(valor_find[1].replace('.', '').replace(' ', '').replace('R$', ''))
@@ -84,7 +94,6 @@ class DataScraper:
                         else:
                             valor.append(0)
                             tipo_alugel.append('')
-
 
                         iptu_find = row.find('span', 'card-price__value')
 
@@ -101,7 +110,7 @@ class DataScraper:
                             area_text = area_find_span.text
                             area_text = area_text.replace('m²', '').replace(' ', '')
 
-                        area.append(area_text)
+                        area.append(area_text.strip())
 
                         quatros_find = row.find_all('li', 'feature__item text-small js-bedrooms')
                         quartos_text = 0
@@ -109,7 +118,7 @@ class DataScraper:
                         for li in quatros_find:
                             quatros_find_span = li.find_all('span')[1]
                             quartos_text = quatros_find_span.text
-                            quartos_text = quartos_text.replace(' ', '')
+                            quartos_text = quartos_text.strip()
 
                         quartos.append(quartos_text)
 
@@ -120,7 +129,7 @@ class DataScraper:
                         for li in vagas_find:
                             vagas_find_span = li.find_all('span')[1]
                             vagas_text = vagas_find_span.text
-                            vagas_text = vagas_text.replace(' ', '')
+                            vagas_text = vagas_text.strip()
 
                         vagas.append(vagas_text)
 
@@ -131,10 +140,12 @@ class DataScraper:
                         for li in banheiros_find:
                             banheiros_text_span = li.find_all('span')[1]
                             banheiros_text = banheiros_text_span.text
-                            banheiros_text = banheiros_text.replace(' ', '')
+                            banheiros_text = banheiros_text.strip()
 
                         banheiros.append(banheiros_text)
+        # End scrapper
 
+        # Data frame constructor.
         data_frame = pd.DataFrame(valor, columns=['Valor'])
         data_frame['Area'] = area
         data_frame['Quartos'] = quartos
@@ -143,10 +154,11 @@ class DataScraper:
         data_frame['TipoNegociacao'] = tipo_negociacao
         data_frame['TipoAluguel'] = tipo_alugel
         data_frame['Iptu'] = iptu
+        data_frame['Logradouro'] = logradouro
+        data_frame['Bairro'] = bairro
         data_frame['Cidade'] = cidade
-        data_frame['Endereco'] = endreco
 
-        # End scrapper
+        # Write data frame to a comma-separated values (csv) file.
         data_frame.to_csv('data.csv', index=False)
 
     def execute(self):
