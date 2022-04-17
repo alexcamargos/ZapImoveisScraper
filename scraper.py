@@ -20,6 +20,7 @@ A scraper that gathers data from Zap Imóveis website using BeautifulSoup.
 """
 
 import logging
+from enum import Enum
 from random import randint
 
 import pandas as pd
@@ -30,7 +31,6 @@ from slugify import slugify
 TOWNS = ['Belo Horizonte']
 STATES = ['mg']
 # TOWNS = ['Belo Horizonte', 'Contagem', 'Betim', 'Governador Valadares', 'Montes Claros']
-UNIT_TYPE = ['Casas', 'Apartamentos', 'Quitinetes']
 
 # URL templates to make searches.
 DOMAIN_NAME = 'www.zapimoveis.com.br'
@@ -39,6 +39,19 @@ PATH = '/%(action)s/%(unit_type)s/%(state)s+%(city)s/?pagina=%(page)s'
 PORT = 443
 CERT_REQS = 'CERT_NONE'
 QUANTITY_TO_FETCH = 3
+
+
+class BusinessFilter(Enum):
+    Comprar = 'Venda'
+    Alugar = 'Aluguel'
+    Lancamentos = 'Lançamentos'
+
+
+class UnitType(Enum):
+    Todos = 'Imoveis'
+    Casas = 'Casas'
+    Apartamentos = 'Apartamentos'
+    Quitinetes = 'Quitinetes'
 
 
 class DataScraper:
@@ -88,15 +101,15 @@ class DataScraper:
         tipo_negociacao = []
 
         for query_cidade in TOWNS:
-            for tipo_imovel in UNIT_TYPE:
+            for tipo_imovel in UnitType:
                 for page in range(1, QUANTITY_TO_FETCH):
                     sleep_time = randint(60, 120)
 
                     # Get all DIVs with card-container class.
-                    result = self.get_data('aluguel', tipo_imovel, query_cidade, page)
+                    result = self.get_data(BusinessFilter.Alugar.value, tipo_imovel.value, query_cidade, page)
 
                     for row in result:
-                        tipo_negociacao.append(tipo_imovel)
+                        tipo_negociacao.append(tipo_imovel.value)
                         cidade.append(query_cidade)
 
                         endereco_find = row.find('h2', 'simple-card__address color-dark text-regular')
@@ -197,7 +210,7 @@ class DataScraper:
 
 def main():
     """Execute when the module is not initialized from an import statement."""
-    
+
     logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.INFO)
     logging.info('Zap Imóveis Scraper --- Started')
 
