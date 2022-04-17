@@ -3,8 +3,9 @@
 
 # ---------------------------------------------------------------------------------------------------------------------
 # Name: scraper.py
-# Version: 0.0.1
-# Summary: Zap Imoveis Scraper
+# Version: 0.0.2
+# Summary: Zap Imóveis Scraper
+#          A scraper that gathers data from Zap Imóveis website using BeautifulSoup.
 #
 # Author: Alexsander Lopes Camargos
 # Author-email: alcamargos@vivaldi.net
@@ -12,8 +13,13 @@
 # License: MIT
 # ---------------------------------------------------------------------------------------------------------------------
 
-"""Zap Imoveis Scraper"""
+"""
+Zap Imóveis Scraper
 
+A scraper that gathers data from Zap Imóveis website using BeautifulSoup.
+"""
+
+import logging
 from random import randint
 
 import pandas as pd
@@ -21,13 +27,18 @@ import urllib3
 from bs4 import BeautifulSoup
 from slugify import slugify
 
-CIDADES = ['Belo Horizonte']
-# CIDADES = ['Belo Horizonte', 'Contagem', 'Betim', 'Governador Valadares', 'Montes Claros']
-TIPOS_IMOVEIS = ['Casas', 'Apartamentos', 'Quitinetes']
-BASE_URL = 'www.zapimoveis.com.br'
+TOWNS = ['Belo Horizonte']
+STATES = ['mg']
+# TOWNS = ['Belo Horizonte', 'Contagem', 'Betim', 'Governador Valadares', 'Montes Claros']
+UNIT_TYPE = ['Casas', 'Apartamentos', 'Quitinetes']
+
+# URL templates to make searches.
+DOMAIN_NAME = 'www.zapimoveis.com.br'
+PATH = '/%(action)s/%(unit_type)s/%(state)s+%(city)s/?pagina=%(page)s'
+
 PORT = 443
 CERT_REQS = 'CERT_NONE'
-QUANTITY_TO_FETCH = 2
+QUANTITY_TO_FETCH = 3
 
 
 class DataScraper:
@@ -35,8 +46,33 @@ class DataScraper:
     def __init__(self, *args):
         super(DataScraper, self).__init__(*args)
 
+    @staticmethod
+    def get_data(action, unit_type, city, page):
+        """Fetch data on the zapimoveis.com.br website using selection criteria.
+
+        Return all DIVs with card-container class.
+        """
+
+        # Constructing the query using selection criteria.
+        query_path = PATH % ({'action': slugify(action),
+                              'unit_type': slugify(unit_type),
+                              'state': STATES[0],
+                              'city': slugify(city),
+                              'page': page})
+
+        pool = urllib3.HTTPSConnectionPool(DOMAIN_NAME, PORT, CERT_REQS)
+        # Make a request.
+        page = pool.request('GET', query_path)
+
+        logging.info(f'GET >> {pool.host}{query_path}\tSTATUS: {page.status}')
+
+        soup = BeautifulSoup(page.data.decode('utf-8'), 'html.parser')
+        page_elements = soup.find_all('div', {'class': 'card-container'})
+
+        return page_elements
+
     def __data_to_csv(self):
-        http = urllib3.PoolManager()
+        # http = urllib3.PoolManager()
 
         valor = []
         tipo_alugel = []
@@ -51,19 +87,13 @@ class DataScraper:
         bairro = []
         tipo_negociacao = []
 
-        for query_cidade in CIDADES:
-            for tipo_imovel in TIPOS_IMOVEIS:
+        for query_cidade in TOWNS:
+            for tipo_imovel in UNIT_TYPE:
                 for page in range(1, QUANTITY_TO_FETCH):
                     sleep_time = randint(60, 120)
-                    http = urllib3.HTTPSConnectionPool(BASE_URL, PORT, CERT_REQS)
 
-                    url = '/aluguel/' + slugify(tipo_imovel) + '/mg+' + slugify(
-                        query_cidade) + '/?pagina=1&tipoUnidade=Residencial,Apartamento&transacao=Aluguel' + str(
-                        page)
-                    page = http.request('GET', url)
-
-                    soup = BeautifulSoup(page.data.decode('utf-8'), 'html.parser')
-                    result = soup.find_all('div', {'class': 'card-container'})
+                    # Get all DIVs with card-container class.
+                    result = self.get_data('aluguel', tipo_imovel, query_cidade, page)
 
                     for row in result:
                         tipo_negociacao.append(tipo_imovel)
@@ -165,6 +195,17 @@ class DataScraper:
         self.__data_to_csv()
 
 
-if __name__ == "__main__":
+def main():
+    """Execute when the module is not initialized from an import statement."""
+    
+    logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.INFO)
+    logging.info('Zap Imóveis Scraper --- Started')
+
     data = DataScraper()
     data.execute()
+
+    logging.info('Zap Imóveis Scraper --- Finished')
+
+
+if __name__ == "__main__":
+    main()
