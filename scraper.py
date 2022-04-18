@@ -176,7 +176,7 @@ class DataScraper:
                                            'IPTU',
                                            'Address',
                                            'Title',
-                                           # TODO: Realizar a limpesa das informaçãoes antes de salvar no data frame.
+                                           # TODO: Realizar a limpeza das informações antes de salvar no data frame.
                                            # 'Description',
                                            'Link',
                                            'Publisher',
