@@ -21,6 +21,7 @@ A scraper that gathers data from Zap Imóveis website using BeautifulSoup.
 
 import json
 import logging
+import re
 import time
 from enum import Enum
 from random import randint
@@ -30,9 +31,9 @@ import urllib3
 from bs4 import BeautifulSoup
 from slugify import slugify
 
-TOWNS = ['Belo Horizonte']
 STATES = ['mg']
-# TOWNS = ['Belo Horizonte', 'Contagem', 'Betim', 'Governador Valadares', 'Montes Claros']
+# TOWNS = ['Belo Horizonte', 'Uberlândia', 'Contagem', 'Juiz de Fora', 'Betim']
+TOWNS = ['Belo Horizonte']
 
 # URL templates to make searches.
 DOMAIN_NAME = 'www.zapimoveis.com.br'
@@ -40,9 +41,9 @@ PATH = '/%(action)s/%(unit_type)s/%(state)s+%(city)s/?pagina=%(page)s'
 
 PORT = 443
 CERT_REQS = 'CERT_NONE'
-QUANTITY_TO_FETCH = 5
-RANDINT_STARTING = 60
-RANDINT_FINAL = 120
+QUANTITY_TO_FETCH = 2
+RANDINT_STARTING = 1
+RANDINT_FINAL = 1
 
 
 class BusinessFilter(Enum):
@@ -73,11 +74,17 @@ class ListedItem:
     Number_bathrooms = None
     Parking_spaces = None
     Address = None
+    Neighborhood = None
+    City = None
+    State = None
+    Longitude = None
+    Latitude = None
     Title = None
     Description = None
     Link = None
     Publisher = None
     Item_ID = None
+    Created = None
     Unit_types = None
 
 
@@ -88,6 +95,17 @@ class DataScraper:
         """Initiating an empty DataScraper."""
 
         super(DataScraper, self).__init__(*args)
+
+    @staticmethod
+    def __parser_description(description):
+        """Parse text description for remove a html tag"""
+
+        # Remove all html tags.
+        description_parsed = re.sub(r'^\s*$', '', description)
+        # Remove empty lines.
+        description_parsed = re.sub(r'\n\s*\n', '\n', description_parsed, re.MULTILINE)
+
+        return description_parsed
 
     @staticmethod
     def __fetch_data(action, unit_type, city, page):
@@ -109,9 +127,8 @@ class DataScraper:
 
         soup = BeautifulSoup(page.data.decode('utf-8'), 'html.parser')
 
-        page_data = soup.find(lambda tag: tag.name == "script"
-                                          and isinstance(tag.string, str)
-                                          and tag.string.startswith("window"))
+        page_data = soup.find(
+            lambda tag: tag.name == "script" and isinstance(tag.string, str) and tag.string.startswith("window"))
 
         json_string = page_data.string.replace("window.__INITIAL_STATE__=", "").replace(
             ";(function(){var s;(s=document.currentScript||document.scripts["
@@ -121,7 +138,55 @@ class DataScraper:
         return json.loads(json_string)['results']['listings']
 
     @staticmethod
-    def __data_scraper(data):
+    def __data_to_csv(data):
+        """Write data to a comma-separated values (csv) file."""
+
+        # Data frame constructor.
+        data_frame = pd.DataFrame([(item.Price,
+                                    item.Condominium_fee,
+                                    item.Floor_size,
+                                    item.Number_bedrooms,
+                                    item.Number_bathrooms,
+                                    item.Parking_spaces,
+                                    item.IPTU_fee,
+                                    item.Address,
+                                    item.Neighborhood,
+                                    item.City,
+                                    item.State,
+                                    item.Longitude,
+                                    item.Latitude,
+                                    item.Title,
+                                    item.Description,
+                                    item.Link,
+                                    item.Publisher,
+                                    item.Item_ID,
+                                    item.Created,
+                                    item.Unit_types) for item in [item for item in data]],
+                                  columns=['Price',
+                                           'Condominium',
+                                           'FloorSize',
+                                           'NumberOfBedrooms',
+                                           'NumberOfBathrooms',
+                                           'ParkingSpaces',
+                                           'IPTU',
+                                           'Address',
+                                           'Neighborhood',
+                                           'City',
+                                           'State',
+                                           'Longitude',
+                                           'Latitude',
+                                           'Title',
+                                           'Description',
+                                           'Link',
+                                           'Publisher',
+                                           'ItemID',
+                                           'Created',
+                                           'UnitTypes'])
+
+        # Write data frame to a comma-separated values (csv) file.
+        data_frame.to_csv('data.csv', index=False)
+
+    def __data_scraper(self, data):
         """Processing the data obtained from the zapimoveis.com.br website."""
 
         item = ListedItem()
@@ -137,54 +202,21 @@ class DataScraper:
         item.Number_bathrooms = int(data['listing']['bathrooms'][0] if len(data['listing']['bathrooms']) > 0 else 0)
         item.Parking_spaces = int(
             data['listing']['parkingSpaces'][0] if len(data['listing']['parkingSpaces']) > 0 else 0)
-        item.Address = (data['link']['data']['street'] + ", " + data['link']['data']['neighborhood'] + ", " +
-                        data['link']['data']['state']).strip(',').strip()
-        item.Title = data['listing']['title']
-        item.Description = data['listing']['description'].replace('<br>', '\n').strip()
-        item.Link = data['link']['href']
-        item.Publisher = data['account']['name']
-        item.Item_ID = data['listing']['id']
-        item.Unit_types = data['listing']['unitTypes']
+        item.Address = f"{data['link']['data']['street'].strip()}, {data['link']['data']['streetNumber'].strip()}"
+        item.Neighborhood = data['link']['data']['neighborhood'].strip()
+        item.City = data['link']['data']['city'].strip()
+        item.State = data['link']['data']['state'].strip()
+        item.Longitude = data['listing']['address']['point']['lat'] if data['listing']['address'].get('point') else None
+        item.Latitude = data['listing']['address']['point']['lat'] if data['listing']['address'].get('point') else None
+        item.Title = data['listing']['title'].strip()
+        item.Description = self.__parser_description(data['listing']['description'].replace('<br>', '\n').strip())
+        item.Link = DOMAIN_NAME + data['link']['href']
+        item.Publisher = data['account']['name'].strip()
+        item.Item_ID = data['listing']['id'].strip()
+        item.Created = data['listing']['createdAt'].strip()
+        item.Unit_types = data['listing']['unitTypes'][0].strip()
 
         return item
-
-    @staticmethod
-    def __data_to_csv(data):
-        """Write data to a comma-separated values (csv) file."""
-
-        # Data frame constructor.
-        data_frame = pd.DataFrame([(item.Price,
-                                    item.Condominium_fee,
-                                    item.Floor_size,
-                                    item.Number_bedrooms,
-                                    item.Number_bathrooms,
-                                    item.Parking_spaces,
-                                    item.IPTU_fee,
-                                    item.Address,
-                                    item.Title,
-                                    # item.Description,
-                                    item.Link,
-                                    item.Publisher,
-                                    item.Item_ID,
-                                    item.Unit_types) for item in [item for item in data]],
-                                  columns=['Price',
-                                           'Condominium',
-                                           'FloorSize',
-                                           'NumberOfBedrooms',
-                                           'NumberOfBathrooms',
-                                           'ParkingSpaces',
-                                           'IPTU',
-                                           'Address',
-                                           'Title',
-                                           # TODO: Realizar a limpeza das informações antes de salvar no data frame.
-                                           # 'Description',
-                                           'Link',
-                                           'Publisher',
-                                           'ItemID',
-                                           'UnitTypes'])
-
-        # Write data frame to a comma-separated values (csv) file.
-        data_frame.to_csv('data.csv', index=False)
 
     def __get_data(self):
         """Processing the pagination of results."""
@@ -196,7 +228,7 @@ class DataScraper:
                 for page in range(1, QUANTITY_TO_FETCH):
                     sleep_time = randint(RANDINT_STARTING, RANDINT_FINAL)
 
-                    results = self.__fetch_data(BusinessFilter.Alugar.value, unit_type.value, query_town, page)
+                    results = self.__fetch_data(BusinessFilter.Comprar.value, unit_type.value, query_town, page)
 
                     for result in results:
                         listed_items.append(self.__data_scraper(result))

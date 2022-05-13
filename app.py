@@ -60,7 +60,7 @@ def main():
                       '--pages',
                       metavar='PAGES',
                       type='int',
-                      help='Número maximo de páginas a consultar.',
+                      help='Número máximo de páginas a consultar.',
                       default=1)
 
     parser.add_option('-f',
