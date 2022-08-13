@@ -6,8 +6,7 @@ repos:
         entry: pylint
         language: system
         types: [python]
-        args:
-          [
+        args: [
             "-rn", # Only display messages
             "-sn", # Don't display the score
             "--rcfile=.pylintrc", # Link to your config file
@@ -17,7 +16,7 @@ repos:
     hooks:
       - id: requirements
         name: requirements
-        entry: 'pip3 freeze > requirements.txt; git add requirements.txt'
+        entry: "pip3 freeze > requirements.txt; git add requirements.txt"
         language: system
         pass_filenames: false
         stages: [commit]
